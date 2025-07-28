@@ -6,6 +6,8 @@ const { categoriaMasVendida } = require('../aggregations/categoriaMasVendida');
 const db = require('../config/db');
 
 async function mainMenu() {
+  console.clear();
+
   const { action } = await inquirer.prompt([
     {
       type: 'list',
@@ -23,43 +25,46 @@ async function mainMenu() {
 
   switch (action) {
     case '📦 Realizar pedido': {
-      const dbConn = await db.connectDB();
-      const clientes = await dbConn.collection('clientes').find({}).toArray();
-      const pizzas = await dbConn.collection('pizzas').find({}).toArray();
+      try {
+        const dbConn = await db.connectDB();
 
-      if (clientes.length === 0 || pizzas.length === 0) {
-        console.log('❌ No hay clientes o pizzas registradas.');
-        break;
+        const clientes = await dbConn.collection('clientes').find({}).toArray();
+        const pizzas = await dbConn.collection('pizzas').find({}).toArray();
+
+        if (clientes.length === 0 || pizzas.length === 0) {
+          console.log('❌ No hay clientes o pizzas registradas.');
+          break;
+        }
+
+        const { clienteSeleccionado } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'clienteSeleccionado',
+            message: 'Selecciona el cliente:',
+            choices: clientes.map(c => ({
+              name: `${c.nombre} (${c._id})`,
+              value: c._id.toString()
+            }))
+          }
+        ]);
+
+        const { pizzasSeleccionadas } = await inquirer.prompt([
+          {
+            type: 'checkbox',
+            name: 'pizzasSeleccionadas',
+            message: 'Selecciona las pizzas:',
+            choices: pizzas.map(p => ({
+              name: `${p.nombre} - $${p.precio}`,
+              value: p._id.toString()
+            })),
+            validate: value => value.length > 0 ? true : 'Debes seleccionar al menos una pizza.'
+          }
+        ]);
+
+        await realizarPedido(clienteSeleccionado, pizzasSeleccionadas);
+      } catch (err) {
+        console.error('❌ Error al procesar el pedido:', err.message);
       }
-
-      // Seleccionar cliente desde menú
-      const { clienteSeleccionado } = await inquirer.prompt([
-        {
-          type: 'list',
-          name: 'clienteSeleccionado',
-          message: 'Selecciona el cliente:',
-          choices: clientes.map(c => ({
-            name: `${c.nombre} (${c._id})`,
-            value: c._id.toString()
-          }))
-        }
-      ]);
-
-      // Seleccionar pizzas desde checkboxes
-      const { pizzasSeleccionadas } = await inquirer.prompt([
-        {
-          type: 'checkbox',
-          name: 'pizzasSeleccionadas',
-          message: 'Selecciona las pizzas:',
-          choices: pizzas.map(p => ({
-            name: `${p.nombre} - $${p.precio}`,
-            value: p._id.toString()
-          })),
-          validate: value => value.length > 0 ? true : 'Debes seleccionar al menos una pizza.'
-        }
-      ]);
-
-      await realizarPedido(clienteSeleccionado, pizzasSeleccionadas);
       break;
     }
 
@@ -81,7 +86,8 @@ async function mainMenu() {
       process.exit(0);
   }
 
-  await mainMenu(); // Recursividad para volver al menú
+  await inquirer.prompt([{ type: 'input', name: 'continuar', message: 'Presiona Enter para volver al menú...' }]);
+  await mainMenu();
 }
 
 mainMenu();

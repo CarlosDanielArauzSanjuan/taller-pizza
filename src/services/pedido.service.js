@@ -1,13 +1,12 @@
 const { client } = require('../config/db');
 const { ObjectId } = require('mongodb');
 
-// Validar si un ID tiene el formato de ObjectId
+// Verifica si un string es un ObjectId válido
 function esObjectIdValido(id) {
   return ObjectId.isValid(id) && String(new ObjectId(id)) === id;
 }
 
 async function realizarPedido(clienteId, pizzaIds) {
-  // Validar cliente y pizzas
   if (!esObjectIdValido(clienteId)) {
     throw new Error('ID de cliente inválido');
   }
@@ -28,18 +27,22 @@ async function realizarPedido(clienteId, pizzaIds) {
       const pedidosCol = db.collection('pedidos');
       const repartidoresCol = db.collection('repartidores');
 
-      // Obtener pizzas pedidas
+      // Convertir IDs a ObjectId
+      const pizzaObjectIds = pizzaIds.map(id => new ObjectId(id));
+
+      // Buscar las pizzas solicitadas
       const pizzas = await pizzasCol.find({
-        _id: { $in: pizzaIds.map(id => new ObjectId(id)) }
+        _id: { $in: pizzaObjectIds }
       }).toArray();
 
-      if (pizzas.length !== pizzaIds.length) {
-        throw new Error('Una o más pizzas no existen');
+      if (pizzas.length !== pizzaObjectIds.length) {
+        throw new Error('Una o más pizzas no existen en la base de datos.');
       }
 
+      // Calcular el total
       const total = pizzas.reduce((sum, pizza) => sum + pizza.precio, 0);
 
-      // Verificar stock
+      // Verificar stock de ingredientes
       const ingredientesNecesarios = {};
       pizzas.forEach(pizza => {
         pizza.ingredientes.forEach(ingId => {
@@ -48,15 +51,18 @@ async function realizarPedido(clienteId, pizzaIds) {
         });
       });
 
-      for (let ingId in ingredientesNecesarios) {
-        const ing = await ingredientesCol.findOne({ _id: new ObjectId(ingId) }, { session });
+      for (const ingId in ingredientesNecesarios) {
+        const ing = await ingredientesCol.findOne(
+          { _id: new ObjectId(ingId) },
+          { session }
+        );
         if (!ing || ing.stock < ingredientesNecesarios[ingId]) {
           throw new Error(`Stock insuficiente de ingrediente: ${ing?.nombre || ingId}`);
         }
       }
 
       // Descontar ingredientes del inventario
-      for (let ingId in ingredientesNecesarios) {
+      for (const ingId in ingredientesNecesarios) {
         await ingredientesCol.updateOne(
           { _id: new ObjectId(ingId) },
           { $inc: { stock: -ingredientesNecesarios[ingId] } },
@@ -71,20 +77,22 @@ async function realizarPedido(clienteId, pizzaIds) {
         { session, returnDocument: 'after' }
       );
 
-      if (!repartidor || !repartidor.value) {
+      if (!repartidor?.value) {
         throw new Error('❌ No hay repartidores disponibles para asignar el pedido.');
       }
 
-      // Registrar pedido
-      await pedidosCol.insertOne({
-        clienteId: new ObjectId(clienteId),
-        pizzas: pizzaIds.map(id => new ObjectId(id)),
-        total,
-        fecha: new Date(),
-        repartidorAsignado: repartidor.value._id
-      }, { session });
-
-    }); // Fin de la transacción
+      // Insertar el pedido
+      await pedidosCol.insertOne(
+        {
+          clienteId: new ObjectId(clienteId),
+          pizzas: pizzaObjectIds,
+          total,
+          fecha: new Date(),
+          repartidorAsignado: repartidor.value._id
+        },
+        { session }
+      );
+    });
 
     console.log('✅ Pedido realizado exitosamente');
   } catch (err) {
