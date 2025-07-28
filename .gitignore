@@ -1,7 +1,7 @@
 # Node modules
 node_modules/
 
-# Configuración de entorno
+# Entorno
 .env
 
 # Logs
@@ -9,13 +9,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Archivos temporales del sistema
+# Sistema operativo
 .DS_Store
-Thumbs.db
 
-# VSCode
+# Editor config
 .vscode/
-
-# Salidas opcionales o temporales
-dist/
-build/
+.idea/
+*.swp
